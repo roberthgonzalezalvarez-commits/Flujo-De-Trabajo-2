@@ -308,50 +308,44 @@ async function fetchYoutubeTranscript(url, apiKeys = {}, onStatusChange = null) 
 
 async function fetchGeminiContent(prompt, apiKey, onLog = null) {
   const log = (type, msg, det) => onLog && onLog(type, msg, det);
-  const modelsToTry = ['gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-pro', 'gemini-1.0-pro'];
-  const versions = ['v1', 'v1beta'];
-
-  let lastError = null;
-
-  for (const ver of versions) {
-    for (const modelName of modelsToTry) {
-      try {
-        const url = `https://generativelanguage.googleapis.com/${ver}/models/${modelName}:generateContent?key=${apiKey}`;
-        
-        log('info', `Intentando Gemini (${modelName}) conexión directa...`);
-        
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-        });
-        
-        if (!response.ok) {
-           const errData = await response.json().catch(()=>({}));
-           const errMsg = errData.error?.message || `HTTP ${response.status} ${response.statusText}`;
-           throw new Error(errMsg);
-        }
-
-        const data = await response.json();
-        if (data.candidates && data.candidates.length > 0) {
-          log('success', `¡Conectado! (${modelName})`);
-          return data.candidates[0].content.parts[0].text;
-        } else {
-          throw new Error("Respuesta vacía de Gemini");
-        }
-
-      } catch (e) {
-        lastError = e.message;
-        log('warning', `Error en ${modelName}: ${e.message}`);
-        // Si API Key es inválida o no soportada en región, parar de inmediato
-        if (e.message.includes('API key not valid') || e.message.includes('unsupported user location')) {
-            throw new Error(`Acceso denegado por Gemini: ${e.message}`);
-        }
-      }
-    }
-  }
   
-  throw new Error(`Fallo de Red Persistente con Gemini. Modelos agotados. Error: ${lastError}`);
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    log('info', `Intentando Gemini (gemini-1.5-flash) conexión directa...`);
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+    });
+    
+    if (!response.ok) {
+       const errData = await response.json().catch(()=>({}));
+       const errMsg = errData.error?.message || `HTTP ${response.status} ${response.statusText}`;
+       throw new Error(errMsg);
+    }
+
+    const data = await response.json();
+    if (data.candidates && data.candidates.length > 0) {
+      log('success', `¡Conectado a Gemini!`);
+      return data.candidates[0].content.parts[0].text;
+    } else {
+      throw new Error("Respuesta vacía de Gemini");
+    }
+
+  } catch (e) {
+    log('warning', `Error exacto de Gemini: ${e.message}`);
+    
+    // Traducción de errores comunes para el usuario
+    let translatedError = e.message;
+    if (translatedError.includes('User location is not supported')) {
+      translatedError = "Google Gemini bloquea las peticiones desde tu país/región. Necesitas una VPN o usar otro proveedor.";
+    } else if (translatedError.includes('API key not valid')) {
+      translatedError = "La API Key de Gemini no es válida o está escrita incorrectamente.";
+    }
+    
+    throw new Error(translatedError);
+  }
 }
 
 async function fetchChatGPTContent(prompt, apiKey, onLog = null) {
