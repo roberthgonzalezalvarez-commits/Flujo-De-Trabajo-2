@@ -326,23 +326,27 @@ async function fetchGeminiContent(prompt, apiKey, onLog = null) {
           body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
         });
         
-        if (response.ok) {
-          log('success', `¡Conectado! (${modelName})`);
-          const data = await response.json();
-          if (data.candidates && data.candidates.length > 0) {
-            return data.candidates[0].content.parts[0].text;
-          }
-        }
-        
-        // Si API Key inválida, frenar inmediatamente
-        if (response.status === 400 || response.status === 403) {
+        if (!response.ok) {
            const errData = await response.json().catch(()=>({}));
-           if (errData.error?.message?.includes('API key')) throw new Error(errData.error.message);
+           const errMsg = errData.error?.message || `HTTP ${response.status} ${response.statusText}`;
+           throw new Error(errMsg);
+        }
+
+        const data = await response.json();
+        if (data.candidates && data.candidates.length > 0) {
+          log('success', `¡Conectado! (${modelName})`);
+          return data.candidates[0].content.parts[0].text;
+        } else {
+          throw new Error("Respuesta vacía de Gemini");
         }
 
       } catch (e) {
         lastError = e.message;
-        if (e.message.includes('API key')) throw e;
+        log('warning', `Error en ${modelName}: ${e.message}`);
+        // Si API Key es inválida o no soportada en región, parar de inmediato
+        if (e.message.includes('API key not valid') || e.message.includes('unsupported user location')) {
+            throw new Error(`Acceso denegado por Gemini: ${e.message}`);
+        }
       }
     }
   }
